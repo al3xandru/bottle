@@ -1,6 +1,7 @@
 *.pyc
 ._*
 *.*~
+*.wpr
 dist/
 *.db
 MANIFEST
