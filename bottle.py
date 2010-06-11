@@ -192,7 +192,7 @@ class Route(object):
     syntax = re.compile(r'(.*?)(?<!\\):([a-zA-Z_]+)?(?:#(.*?)#)?')
     default = '[^/]+'
 
-    def __init__(self, route, target, name=None, static=False):
+    def __init__(self, route, method, target, name=None, static=False):
         """ Create a Route. The route string may contain `:key`,
             `:key#regexp#` or `:#regexp#` tokens for each dynamic part of the
             route. These can be escaped with a backslash infront of the `:`
@@ -200,6 +200,7 @@ class Route(object):
             to refer to this route later (depends on Router)
         """
         self.route = route
+        self.method = method
         self.target = target
         self.name = name
         self._static = static
@@ -265,13 +266,14 @@ class Route(object):
         return False
 
     def __repr__(self):
-        return self.route
+        return "%s;%s" % (self.method, self.route)
 
     def __eq__(self, other):
         return self.route == other.route\
-           and self.static == other.static\
-           and self.name == other.name\
-           and self.target == other.target
+               and self.method == other.method\
+               and self.static == other.static\
+               and self.name == other.name\
+               and self.target == other.target
 
 
 class Router(object):
@@ -284,7 +286,7 @@ class Router(object):
     def __init__(self):
         self.routes = []     # List of all installed routes
         self.static = dict() # Cache for static routes
-        self.dynamic = []    # Cache structure for dynamic routes
+        self.dynamic = dict()  # Cache structure for dynamic routes
         self.named = dict()  # Cache for named routes and their format strings
 
     def add(self, *a, **ka):
@@ -296,31 +298,34 @@ class Router(object):
         if route.name:
             self.named[route.name] = route.format_str()
         if route.static:
-            self.static[route.route] = route.target
+            self.static[route.route] = self.static.get(route.route, {})
+            if self.static[route.route].has_key(route.method):
+                print "WARN: overridding definition %s %s -> %s" % (route.method, route.route, route.target.__name__)
+            self.static[route.route][route.method] =  (route.target, None)
             return
         gpatt = route.group_re()
-        fpatt = route.flat_re()
-        try:
-            gregexp = re.compile('^(%s)$' % gpatt) if '(?P' in gpatt else None
-            combined = '%s|(^%s$)' % (self.dynamic[-1][0].pattern, fpatt)
-            self.dynamic[-1] = (re.compile(combined), self.dynamic[-1][1])
-            self.dynamic[-1][1].append((route.target, gregexp))
-        except (AssertionError, IndexError), e: # AssertionError: Too many groups
-            self.dynamic.append((re.compile('(^%s$)'%fpatt),[(route.target, gregexp)]))
-        except re.error, e:
-            raise RouteSyntaxError("Could not add Route: %s (%s)" % (route, e))
+        fpatt = re.compile('(^%s$)'% route.flat_re())
+        gregexp = re.compile('^(%s)$' % gpatt) if '(?P' in gpatt else None
+        
+        self.dynamic[fpatt] = self.dynamic.get(fpatt, {})
+        if self.dynamic[fpatt].has_key(route.method):
+            print "WARN: overridding definition %s %s -> %s" % (route.method, route.route, route.target.__name__)
+        self.dynamic[fpatt][route.method] = (route.target, gregexp)
 
     def match(self, uri):
-        ''' Matches an URL and returns a (handler, target) tuple '''
-        if uri in self.static:
-            return self.static[uri], {}
-        for combined, subroutes in self.dynamic:
-            match = combined.match(uri)
+        ''' Matches an URL and returns a list of (method, handler, params) tuples '''
+        matched_routes = []
+        
+        suri = self.static.get(uri)
+        if suri:
+            matched_routes.append(suri)
+
+        for patt in self.dynamic:
+            match = patt.match(uri)
             if not match: continue
-            target, groups = subroutes[match.lastindex - 1]
-            groups = groups.match(uri).groupdict() if groups else {}
-            return target, groups
-        return None, {}
+            matched_routes.append(self.dynamic[patt])
+            
+        return matched_routes
 
     def build(self, route_name, **args):
         ''' Builds an URL out of a named route and some parameters.'''
@@ -387,15 +392,26 @@ class Bottle(object):
             Return (callback, param) tuple or (None, {}).
             method: HEAD falls back to GET. All methods fall back to ANY.
         """
-        path = path.strip().lstrip('/')
-        handler, param = self.routes.match(method + ';' + path)
-        if handler: return handler, param
-        if method == 'HEAD':
-            handler, param = self.routes.match('GET;' + path)
-            if handler: return handler, param
-        handler, param = self.routes.match('ANY;' + path)
-        if handler: return handler, param
-        return None, {}
+        rpath = path.strip().lstrip('/')
+        uri_matches = self.routes.match(rpath)
+        if not uri_matches:
+            raise HTTPError(404, "Not found:" + path)
+        matches = []
+        for m in uri_matches:
+            r = m.get(method) or (m.get('GET') if method == 'HEAD' else None) or m.get('ANY')
+            if r:
+                matches.append(r)
+        if not matches:
+            allowed_methods = []
+            for m in uri_matches:
+                allowed_methods.extend(m.keys())
+            raise HTTPError(405, "Method Not Allowed on %s (%s)" % (path, method), header={'Allow': ', '.join(set(allowed_methods))})
+        else:
+            if len(matches) > 1:
+                print "WARN: Multiple matches found for uri %s method %s" % (path, method)
+            handler, groupregexp = matches[0]
+            return (handler, groupregexp.match(rpath).groupdict() if groupregexp else {})
+
 
     def get_url(self, routename, **kargs):
         """ Return a string that matches a named route """
@@ -419,8 +435,7 @@ class Bottle(object):
                 paths = yieldroutes(callback)
             for p in paths:
                 for m in method:
-                    route = m.upper() + ';' + p
-                    self.routes.add(route, callback, **kargs)
+                    self.routes.add(p, m.upper(), callback, **kargs)
             return callback
         return wrapper
 
@@ -458,11 +473,12 @@ class Bottle(object):
         if not self.serve:
             return HTTPError(503, "Server stopped")
 
-        handler, args = self.match_url(url, method)
-        if not handler:
-            return HTTPError(404, "Not found:" + url)
+        #if not handler:
+            #return HTTPError(404, "Not found:" + url)
 
         try:
+            handler, args = self.match_url(url, method)
+
             return handler(**args)
         except HTTPResponse, e:
             return e
