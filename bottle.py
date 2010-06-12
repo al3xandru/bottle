@@ -300,7 +300,7 @@ class Router(object):
         if route.static:
             self.static[route.route] = self.static.get(route.route, {})
             if self.static[route.route].has_key(route.method):
-                print "WARN: overridding definition %s %s -> %s" % (route.method, route.route, route.target.__name__)
+                print "WARNING: overridding definition %s %s -> %s" % (route.method, route.route, route.target.__name__)
             self.static[route.route][route.method] =  (route.target, None)
             return
         gpatt = route.group_re()
@@ -309,7 +309,7 @@ class Router(object):
         
         self.dynamic[fpatt] = self.dynamic.get(fpatt, {})
         if self.dynamic[fpatt].has_key(route.method):
-            print "WARN: overridding definition %s %s -> %s" % (route.method, route.route, route.target.__name__)
+            print "WARNING: overridding definition %s %s -> %s" % (route.method, route.route, route.target.__name__)
         self.dynamic[fpatt][route.method] = (route.target, gregexp)
 
     def match(self, uri):
@@ -415,7 +415,7 @@ class Bottle(object):
 
     def get_url(self, routename, **kargs):
         """ Return a string that matches a named route """
-        return '/' + self.routes.build(routename, **kargs).split(';', 1)[1]
+        return '/' + self.routes.build(routename, **kargs)
 
     def route(self, path=None, method='GET', **kargs):
         """ Decorator: Bind a function to a GET request path.
