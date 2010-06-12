@@ -477,9 +477,6 @@ class Bottle(object):
         if not self.serve:
             return HTTPError(503, "Server stopped")
 
-        #if not handler:
-            #return HTTPError(404, "Not found:" + url)
-
         try:
             handler, args = self.match_url(url, method)
 
@@ -1016,7 +1013,7 @@ def static_file(filename, root, guessmime=True, mimetype=None, download=False):
         ims = ims.split(";")[0].strip() # IE sends "<date>; length=146"
         ims = parse_date(ims)
         if ims is not None and ims >= int(stats.st_mtime):
-           return HTTPResponse(status=304, header=header)
+            return HTTPResponse(status=304, header=header)
     header['Content-Length'] = stats.st_size
     if request.method == 'HEAD':
         return HTTPResponse('', header=header)
@@ -1070,7 +1067,7 @@ def cookie_decode(data, key):
     if cookie_is_encoded(data):
         sig, msg = data.split(u'?'.encode('ascii'),1) #2to3 hack
         if sig[1:] == base64.b64encode(hmac.new(key, msg).digest()):
-           return pickle.loads(base64.b64decode(msg))
+            return pickle.loads(base64.b64decode(msg))
     return None
 
 
@@ -1203,8 +1200,8 @@ class CGIServer(ServerAdapter):
 
 class FlupFCGIServer(ServerAdapter):
     def run(self, handler): # pragma: no cover
-       import flup.server.fcgi
-       flup.server.fcgi.WSGIServer(handler, bindAddress=(self.host, self.port)).run()
+        import flup.server.fcgi
+        flup.server.fcgi.WSGIServer(handler, bindAddress=(self.host, self.port)).run()
 
 
 class WSGIRefServer(ServerAdapter):
@@ -1380,8 +1377,8 @@ def reloader_run(server, app, interval):
                         print 'Parent Bottle process killed'
                         print 'Use Ctrl-C to exit.'
                     else:
-                        continue
                         print "Restarting..."
+                        continue
                 app.serve = False
                 time.sleep(interval) # be nice and wait for running requests
                 sys.exit(3)
