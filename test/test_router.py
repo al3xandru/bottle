@@ -9,30 +9,31 @@ class TestRouter(unittest.TestCase):
         add = self.r.add
         match = self.r.match
         add('/static', 'static')
-        self.assertEqual(('static', {}), match('/static'))
+        self.assertMatches('/static', 'static')
         add('/\\:its/:#.+#/:test/:name#[a-z]+#/', 'handler')
-        self.assertEqual(('handler', {'test': 'cruel', 'name': 'world'}), match('/:its/a/cruel/world/'))
+        self.assertMatches('/:its/a/cruel/world/', 'handler', {'test': 'cruel', 'name': 'world'})
         add('/:test', 'notail')
-        self.assertEqual(('notail', {'test': 'test'}), match('/test'))
+        self.assertMatches('/test', 'notail', {'test': 'test'})
         add(':test/', 'nohead')
-        self.assertEqual(('nohead', {'test': 'test'}), match('test/'))
+        self.assertMatches('test/', 'nohead', {'test': 'test'})
         add(':test', 'fullmatch')
-        self.assertEqual(('fullmatch', {'test': 'test'}), match('test'))
+        self.assertMatches('test', 'fullmatch', {'test': 'test'})
         add('/:#anon#/match', 'anon')
-        self.assertEqual(('anon', {}), match('/anon/match'))
-        self.assertEqual((None, {}), match('//no/m/at/ch/'))
+        self.assertMatches('/anon/match', 'anon')
+        self.assertFalse(match('//no/m/at/ch/'), "Expecting empty list of matches")
+        
 
     def testParentheses(self):
         add = self.r.add
         match = self.r.match
         add('/func(:param)', 'func')
-        self.assertEqual(('func', {'param':'foo'}), match('/func(foo)'))
+        self.assertMatches('/func(foo)', 'func', {'param':'foo'})
         add('/func2(:param#(foo|bar)#)', 'func2')
-        self.assertEqual(('func2', {'param':'foo'}), match('/func2(foo)'))
-        self.assertEqual(('func2', {'param':'bar'}), match('/func2(bar)'))
-        self.assertEqual((None, {}),                match('/func2(baz)'))        
+        self.assertMatches('/func2(foo)', 'func2', {'param':'foo'})
+        self.assertMatches('/func2(bar)', 'func2', {'param':'bar'})
+        self.assertFalse( match('/func2(baz)'), "Expecting empty list of matches") 
         add('/groups/:param#(foo|bar)#', 'groups')
-        self.assertEqual(('groups', {'param':'foo'}), match('/groups/foo'))
+        self.assertMatches('/groups/foo', 'groups', {'param':'foo'})
 
     def testErrorInPattern(self):
         self.assertRaises(bottle.RouteSyntaxError, self.r.add, '/:bug#(#/', 'buggy')
@@ -52,6 +53,17 @@ class TestRouter(unittest.TestCase):
         # RouteBuildError: Parameter 'name' does not match pattern for route 'testroute': '[a-z]+'
         #self.assertRaises(bottle.RouteBuildError, build, 'anonroute')
         # RouteBuildError: Anonymous pattern found. Can't generate the route 'anonroute'.
+        
+    def assertMatches(self, uri, handler_name, params={}, method='GET'):
+        match = self.r.match
+        expected_value = match(uri)
+        self.assertEquals(len(expected_value), 1)
+        tpl = expected_value[0].get(method)
+        self.assertTrue(tpl != None, "Method doesn't match")
+        self.assertEquals(handler_name, tpl[0])
+        if params:
+            expected_params = tpl[1].match(uri).groupdict()
+            self.assertEquals(params, expected_params)
 
 if __name__ == '__main__':
     unittest.main()

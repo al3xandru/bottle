@@ -192,7 +192,7 @@ class Route(object):
     syntax = re.compile(r'(.*?)(?<!\\):([a-zA-Z_]+)?(?:#(.*?)#)?')
     default = '[^/]+'
 
-    def __init__(self, route, method, target, name=None, static=False):
+    def __init__(self, route, target, method='GET', name=None, static=False):
         """ Create a Route. The route string may contain `:key`,
             `:key#regexp#` or `:#regexp#` tokens for each dynamic part of the
             route. These can be escaped with a backslash infront of the `:`
@@ -303,14 +303,18 @@ class Router(object):
                 print "WARNING: overridding definition %s %s -> %s" % (route.method, route.route, route.target.__name__)
             self.static[route.route][route.method] =  (route.target, None)
             return
-        gpatt = route.group_re()
-        fpatt = re.compile('(^%s$)'% route.flat_re())
-        gregexp = re.compile('^(%s)$' % gpatt) if '(?P' in gpatt else None
-        
-        self.dynamic[fpatt] = self.dynamic.get(fpatt, {})
-        if self.dynamic[fpatt].has_key(route.method):
-            print "WARNING: overridding definition %s %s -> %s" % (route.method, route.route, route.target.__name__)
-        self.dynamic[fpatt][route.method] = (route.target, gregexp)
+        try:
+            gpatt = route.group_re()
+            fpatt = re.compile('(^%s$)'% route.flat_re())
+            gregexp = re.compile('^(%s)$' % gpatt) if '(?P' in gpatt else None
+            
+            self.dynamic[fpatt] = self.dynamic.get(fpatt, {})
+            if self.dynamic[fpatt].has_key(route.method):
+                print "WARNING: overridding definition %s %s -> %s" % (route.method, route.route, route.target.__name__)
+            self.dynamic[fpatt][route.method] = (route.target, gregexp)
+        except re.error, e:
+            raise RouteSyntaxError("Could not add Route: %s (%s)" % (route, e))
+
 
     def match(self, uri):
         ''' Matches an URL and returns a list of (method, handler, params) tuples '''
@@ -435,7 +439,7 @@ class Bottle(object):
                 paths = yieldroutes(callback)
             for p in paths:
                 for m in method:
-                    self.routes.add(p, m.upper(), callback, **kargs)
+                    self.routes.add(p, callback, m.upper(), **kargs)
             return callback
         return wrapper
 
