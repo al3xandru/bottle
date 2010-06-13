@@ -563,10 +563,9 @@ class Bottle(object):
             out = self._cast(out, request, response)
             response.status = 200 if not response.status else response.status
             response.content_type = 'text/html; charset=UTF-8' if not response.headers.get('Content-Type') else response.content_type
+            # rfc2616 section 4.3
             if response.status in (100, 101, 204, 304) or request.method == 'HEAD':
-                out = [] # rfc2616 section 4.3
-            if response.status == 204:
-                del response.headers['Content-Type'] #WSGI validation
+                out = []
             status = '%d %s' % (response.status, HTTP_CODES[response.status])
             start_response(status, response.headerlist)
             return out
@@ -842,6 +841,15 @@ class Response(threading.local):
         for c in self.COOKIES.values():
             if c.OutputString() not in self.headers.getall('Set-Cookie'):
                 self.headers.append('Set-Cookie', c.OutputString())
+        # rfc2616 section 10.2.3, 10.3.5
+        if self.status in (204, 304) and 'content-type' in self.headers:
+            del self.headers['content-type']
+        if self.status == 304:
+            for h in ('allow', 'content-encoding', 'content-language',
+                      'content-length', 'content-md5', 'content-range',
+                      'content-type', 'last-modified'): # + c-location, expires?
+                if h in self.headers:
+                    del self.headers[h]
         return list(self.headers.iterallitems())
     headerlist = property(wsgiheader)
 
@@ -1017,6 +1025,7 @@ def static_file(filename, root, guessmime=True, mimetype=None, download=False):
         ims = ims.split(";")[0].strip() # IE sends "<date>; length=146"
         ims = parse_date(ims)
         if ims is not None and ims >= int(stats.st_mtime):
+            header['Date'] = time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime())
             return HTTPResponse(status=304, header=header)
     header['Content-Length'] = stats.st_size
     if request.method == 'HEAD':
