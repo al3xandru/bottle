@@ -505,7 +505,8 @@ class Bottle(object):
             response.headers['Content-Length'] = 0
             return []
         # Join lists of byte or unicode strings. Mixed lists are NOT supported
-        if isinstance(out, list) and isinstance(out[0], (StringType, unicode)):
+        if isinstance(out, (tuple, list))\
+        and isinstance(out[0], (StringType, unicode)):
             out = out[0][0:0].join(out) # b'abc'[0:0] -> b''
         # Encode unicode strings
         if isinstance(out, unicode):
@@ -522,10 +523,10 @@ class Bottle(object):
             out.apply(response)
             return self._cast(out.output, request, response)
 
-        # Cast Files into iterables
-        if hasattr(out, 'read') and 'wsgi.file_wrapper' in request.environ:
+        # File-like objects. Wrap or transfer in chunks that fit into memory.
+        if hasattr(out, 'read'):
             out = request.environ.get('wsgi.file_wrapper',
-            lambda x, y: iter(lambda: x.read(y), ''))(out, 1024*64)
+                  lambda x, y: iter(lambda: x.read(y), tob('')))(out, 1024*64)
 
         # Handle Iterables. We peek into them to detect their inner type.
         try:
