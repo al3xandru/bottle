@@ -28,7 +28,7 @@ class ContentNegociation(CorkedServerTest):
     self.assertBody('unicode', '/unicode')
     self.assertHeader('Content-Type', 'text/plain; charset=UTF-8', '/unicode')
     
-    #self.assertStatus(406, '/unicode', env={'HTTP_ACCEPT': 'application/xhtml'})
+    self.assertStatus(406, '/unicode', env={'HTTP_ACCEPT': 'application/xhtml'})
     
     @bottle.route('/str')
     def r_str(): return 'str'

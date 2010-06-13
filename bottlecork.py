@@ -22,9 +22,11 @@ class BottleCork(bottle.Bottle):
     '''
     if not isinstance(ftype, type):
       raise TypeError("Expected type object, got %s" % type(ftype))
-    mtypes = media_types or ["*/*"]
+    if not media_types:
+      print "WARNING: filters should declare their specific media types"
+    media_types = media_types or ["*/*"]
     self.types_mediatypes[ftype] = self.types_mediatypes.get(ftype) or set()
-    for mt in mtypes:
+    for mt in media_types:
       if self.mediatype_filters.has_key((ftype, mt)):
         print "WARNING: overriding filter %s for (%s, %s) with %s" % (self.mediatype_filters[(ftype, mt)].__name__, ftype.__name__, mt, func.__name__)
       self.mediatype_filters[(ftype, mt)] = func
@@ -37,10 +39,8 @@ class BottleCork(bottle.Bottle):
     iterable of strings and iterable of unicodes
     """
     if not out:
-      # must delete Content-Type WSGI raises exception
-      del response.headers['Content-Type']
       response.headers['Content-Length'] = 0
-      response.status = 204
+      response.status = 204 if not response.status else response.status
       return []
     if isinstance(out, bottle.HTTPError):
       out.apply(response)
@@ -75,13 +75,10 @@ class BottleCork(bottle.Bottle):
       supported = ['text/plain', 'application/octet-stream']
       if response.content_type:
         supported.append(response.content_type)
-      content_type = self._best_media_match(supported, accepted_mediatypes)
-      print "content_type == %s, supported: %s" % (content_type, supported)
-      if content_type:
-        content_type = "%s; charset=%s" % (content_type, response.charset) if response.charset else content_type
-        response.content_type = content_type
-        response.headers['Content-Length'] = str(len(out))
-        return [out]
+      response.content_type = self._best_media_match(supported, accepted_mediatypes) or \
+                   ("text/plain; charset=%s" % response.charset if response.charset else 'text/plain')
+      response.headers['Content-Length'] = str(len(out))
+      return [out]
     # Cast Files into iterables
     if hasattr(out, 'read'):
       supported = ['application/octet-stream']

@@ -561,8 +561,12 @@ class Bottle(object):
             response.bind(self)
             out = self.handle(request.path, request.method)
             out = self._cast(out, request, response)
+            response.status = 200 if not response.status else response.status
+            response.content_type = 'text/html; charset=UTF-8' if not response.headers.get('Content-Type') else response.content_type
             if response.status in (100, 101, 204, 304) or request.method == 'HEAD':
                 out = [] # rfc2616 section 4.3
+            if response.status == 204:
+                del response.headers['Content-Type'] #WSGI validation
             status = '%d %s' % (response.status, HTTP_CODES[response.status])
             start_response(status, response.headerlist)
             return out
@@ -820,9 +824,9 @@ class Response(threading.local):
     def bind(self, config=None):
         """ Resets the Response object to its factory defaults. """
         self._COOKIES = None
-        self.status = 200
+        self.status = None # 200
         self.headers = HeaderDict()
-        self.content_type = 'text/html; charset=UTF-8'
+        self.content_type = '' #'text/html; charset=UTF-8'
         self.config = config or {}
 
     def copy(self):
