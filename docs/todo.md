@@ -1,0 +1,2 @@
+- Fix behavior for requests resulting in 406 (infinite loops due to media negotiation)
+- Improve behavior on HTTPError (basically it's very difficult to return something else than HTML) 
