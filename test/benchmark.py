@@ -1,34 +1,83 @@
 import os
+import sys
 import time
 
+from StringIO import StringIO
+
 class Benchmark(object):
+  """ Example:
+  
+  - Benchmark.measure(manualBenchmark)
+  
+  - Benchmark.measure(manualBenchmark, 'second run')
+
+  - Benchmark.bm(manualBenchmark, manualBench2)
+  
+  - Benchmark.bm(('Manual', manualBench2), ('Automatic', manualBenchmark))
+  """
+
   @staticmethod
   def measure(function, label=''):
+    """ Time the execution of a single function. """
     if not callable(function):
       raise TypeError("Expecting a function")
     label = label or function.__name__
     Benchmark.bm((label, function))
   
   @staticmethod
-  def bm(*args):
-    results = {}
-    order = []
-    is_tuples = isinstance(args[0], tuple)
-    if is_tuples:
-      for l, f in args:
-        if not callable(f):
-          raise TypeError("Expecting a function for %s" % l)
-        order.append(l)
-        results[l] = Benchmark._exec(f)
-    else:
-      for f in args:
-        if not callable(f):
-          raise TypeError("Expecting a list of functions")
-        order.append(f.__name__)
-        results[f.__name__] = Benchmark._exec(f)
-
-    Benchmark._print(order, results)
+  def bm(*args, **kwargs):
+    """ Time the execution of multiple functions and display
+    the results in a readable way.
     
+    The only named parameter allowed is `rehearse`
+    """
+    rehearse = kwargs.get('rehearse', False)
+    new_stdout = StringIO()
+    sys.stdout = sys.stderr = new_stdout
+    
+    try:
+      results = {}
+      order = []
+      is_tuples = isinstance(args[0], tuple)
+      if is_tuples:
+        for l, f in args:
+          if not callable(f):
+            raise TypeError("Expecting a function for %s" % l)
+          order.append(l)
+          results[l] = f
+      else:
+        for f in args:
+          if not callable(f):
+            raise TypeError("Expecting a list of functions")
+          order.append(f.__name__)
+          results[f.__name__] = f
+          
+      max_label = max(map(len, order))
+      print >> sys.__stdout__, "%s    user        system      total       real" % (" " * (max_label + (6 if rehearse else 2)))
+      total = TimeStruct(0, 0, 0)
+      for l in order:
+        if rehearse:
+          t = Benchmark._exec(results[l])
+          print >> sys.__stdout__,  "%s%s(r): %11.6f %11.6f %11.6f %11.6f" % (l, ' ' * (max_label - len(l)), t.utime, t.stime, t.ttime, t.rtime)
+
+        indent = ' ' * (max_label - len(l) + (3 if rehearse else 0))
+        t = Benchmark._exec(results[l])
+        print >> sys.__stdout__,  "%s%s: %11.6f %11.6f %11.6f %11.6f" % (l, indent, t.utime, t.stime, t.ttime, t.rtime)
+        total = total + t
+        
+          
+      if len(results) > 1:
+        print >> sys.__stdout__, ''
+        print >> sys.__stdout__,  "Total%s: %11.6f %11.6f %11.6f %11.6f" % (" " * (max_label - 5 + (3 if rehearse else 0)) , total.utime, total.stime, total.ttime, total.rtime)
+    finally:
+      sys.stdout = sys.__stdout__
+      sys.stderr = sys.__stderr__
+      print 
+      print "Output:"
+      print new_stdout.getvalue()
+
+    
+      
   @staticmethod
   def _print(order, results):
     max_label = max(map(len, order))
@@ -82,20 +131,3 @@ class TimeStruct(object):
     return self._format % (self.utime, self.stime, self.rtime, self.ttime)
   
 
-def manualBenchmark():
-  s = 0
-  for i in xrange(1000000):
-    s = s + i
-  print s
-  
-def manualBench2():
-  manualBenchmark()
-  
-def test():
-  Benchmark.measure(manualBenchmark)
-  Benchmark.measure(manualBenchmark, 'second run')
-  Benchmark.bm(manualBenchmark, manualBench2)
-  Benchmark.bm({'Manual': manualBench2, 'Automatic': manualBenchmark})
-  
-if __name__ == '__main__':
-  test()

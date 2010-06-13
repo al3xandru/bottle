@@ -90,7 +90,7 @@ ROUTES = ('/',
 )
 
 if __name__ == '__main__':
-  counter = 10000
+  counter = 1000
   Benchmark.bm(('all (6)', lambda: all_match(build_all_pattern(6), counter)),
                ('seq (6)', lambda: seq_match(build_seq_pattern(6), counter)),
                ('mix (6)', lambda: mixed_seq_match(build_all_pattern(6), build_seq_pattern(6), counter)),
@@ -106,7 +106,7 @@ if __name__ == '__main__':
                ('all (30)', lambda: all_match(build_all_pattern(30), counter)),
                ('seq (30)', lambda: seq_match(build_seq_pattern(30), counter)),
                ('mix (30)', lambda: mixed_seq_match(build_all_pattern(30), build_seq_pattern(30), counter)),
-               )
+               rehearse=False               )
   
 
           
