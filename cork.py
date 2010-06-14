@@ -1,4 +1,29 @@
-from bottle import request, response
+import functools
+
+import bottle
+
+
+def option_route(app, path=None, method='GET', **kwargs):
+  def _wrapper(function):
+    @functools.wraps(function)
+    def _result_wrapper(*a, **ka):
+      try:
+        result = function(*a, **ka)
+      except Exception, e:
+        result = e
+      return option(result)
+    return app.route(path, method, **kwargs)(_result_wrapper)
+  return _wrapper
+  
+route  = functools.partial(option_route, bottle.app())
+
+class Option(object):
+  __slots__ = ['value']
+  
+  def __init__(self, v=None):
+    self.value = v
+    
+option = Option
 
 
 class MediaTypeFilter(object):
@@ -27,31 +52,39 @@ class MediaTypeFilter(object):
       self.mediatype_filters[(ftype, mt)] = func
       self.types_mediatypes[ftype].add(mt)
       
-  def filter(self, value):
+  def filter(self, opt):
+    app = bottle.app()
+    value = opt.value
     if not value:
-      response.headers['Content-Length'] = 0
-      if request.method != 'HEAD':
-        response.status = 204 if not response.status else response.status
-        return []
+      bottle.response.headers['Content-Length'] = 0
+      bottle.response.status = 204 if not bottle.response.status and bottle.request.method != 'HEAD' else bottle.response.status
+      return []
+    
+    if isinstance(value, bottle.HTTPError):
+      value.apply(bottle.response)
+      err_handler = app.error_handler.get(value.status)
+      if not err_handler:
+        err_handler = repr
+        bottle.response.content_type = "text/html" if not bottle.response.charset else "text/html; charset=%s" % bottle.response.charset
+      return value
       
     if isinstance(value, (bottle.HTTPError, bottle.HTTPResponse)):
       return value
     
+    accepted_mediatypes = [parse_media_range(r) for r in bottle.request.header.get('accept', '*/*').split(",")]
+    
     # Should return after setting the content type
     if hasattr(value, 'read'):
-      supported = ['application/octet-stream']
-      if response.content_type:
-        supported.append(response.content_type)
-      content_type = self._best_media_match(supported, accepted_mediatypes)
-      if content_type and content_type != '*/*':
-        response.content_type = content_type
+      if not bottle.response.content_type:
+        content_type = self._best_media_match(['application/octet-stream'], accepted_mediatypes)
+        if content_type and content_type != '*/*':
+          bottle.response.content_type = content_type 
       return value
   
-    accepted_mediatypes = [parse_media_range(r) for r in request.header.get('accept', '*/*').split(",")]
-  
+      
     type_mtypes = {}
     for ftype in self.types_mediatypes:
-      if isinstance(out, ftype):
+      if isinstance(value, ftype):
         for mt in self.types_mediatypes[ftype]:
           type_mtypes[mt] = type_mtypes.get(mt, [])
           type_mtypes[mt].append(ftype)
@@ -62,22 +95,26 @@ class MediaTypeFilter(object):
         types = sorted(types, cmp=lambda o1, o2: len(o2.__mro__) - len(o1.__mro__))
         mtype = types[0]
   
-        return self.filter(self.mediatype_filters[(mtype, content_type)](out))
+        return self.filter(option(self.mediatype_filters[(mtype, content_type)](value)))
       
-    if isinstance(out, unicode):
-      out = out.encode(response.charset)
+    # only string-like
+    supported = ['application/octet-stream']
+    if isinstance(value, unicode):
+      value = value.encode(bottle.response.charset)
+      supported.append("text/plain; charset=%s" % bottle.response.charset)
       
-    if isinstance(out, bottle.StringType):
-      supported = ['text/plain', 'application/octet-stream']
-      if response.content_type:
-        supported.append(response.content_type)
-      response.content_type = self._best_media_match(supported, accepted_mediatypes) or \
-                   ("text/plain; charset=%s" % response.charset if response.charset else 'text/plain')
-      response.headers['Content-Length'] = str(len(out))
-      return [out]
-  
-    return self.filter(bottle.HTTPError(code=406, 
-            output="The requested URI '%s' exists, but not in a format preferred by the client." % request.path))
+    if isinstance(value, bottle.StringType):
+      if bottle.response.charset:
+        supported.append("text/plain; charset=%s" % bottle.response.charset)
+      if not bottle.response.content_type:
+        bottle.response.content_type = self._best_media_match(supported, accepted_mediatypes) or \
+                     ("text/plain; charset=%s" % bottle.response.charset if bottle.response.charset else 'text/plain')
+      bottle.response.headers['Content-Length'] = str(len(value))
+      return [value]
+    
+    return self.filter(option(bottle.HTTPError(code=406, 
+                                               output="The requested URI '%s' exists, but not in a format preferred by the client." % bottle.request.path)
+                              ))
 
   
   def _best_media_match(self, supported, parsed_header):
