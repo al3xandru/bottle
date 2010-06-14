@@ -40,16 +40,29 @@ class BottleCork(bottle.Bottle):
     """
     if not out:
       response.headers['Content-Length'] = 0
-      response.status = 204 if not response.status else response.status
+      response.status = 204 if not response.status and request.method != 'HEAD' else response.status
       return []
+    
     if isinstance(out, bottle.HTTPError):
       out.apply(response)
-      return self._cast(self.error_handler.get(out.status, repr)(out), request, response)
+      err_handler = self.error_handler.get(out.status)
+      if not err_handler:
+        err_handler = repr
+        response.content_type = "text/html" if not response.charset else "text/html; charset=%s" % response.charset
+      return self._cast(err_handler(out), request, response)
+      
     if isinstance(out, bottle.HTTPResponse):
-      out.apply(response)
-      return self._cast(out.output, request, response)
+      return super(BottleCork, self)._cast(out, request, response, peek)
 
     accepted_mediatypes = [parse_media_range(r) for r in request.header.get('accept', '*/*').split(",")]
+    
+    # Just try to negociate media-type
+    if hasattr(out, 'read'):
+      if not response.content_type:
+        content_type = self._best_media_match(['application/octet-stream'], accepted_mediatypes)
+        if content_type and content_type != '*/*':
+          response.content_type = content_type 
+      return super(BottleCork, self)._cast(out, request, response, peek)
 
     type_mtypes = {}
     for ftype in self.types_mediatypes:
@@ -67,28 +80,22 @@ class BottleCork(bottle.Bottle):
         mtype = types[0]
 
         return self._cast(self.mediatype_filters[(mtype, content_type)](out), request, response)
-      
+
+    # only string-like
+    supported = ['application/octet-stream']
     if isinstance(out, unicode):
       out = out.encode(response.charset)
+      supported.append("text/plain; charset=%s" % response.charset)
       
     if isinstance(out, bottle.StringType):
-      supported = ['text/plain', 'application/octet-stream']
-      if response.content_type:
-        supported.append(response.content_type)
-      response.content_type = self._best_media_match(supported, accepted_mediatypes) or \
-                   ("text/plain; charset=%s" % response.charset if response.charset else 'text/plain')
+      if response.charset:
+        supported.append("text/plain; charset=%s" % response.charset)
+      if not response.content_type:
+        response.content_type = self._best_media_match(supported, accepted_mediatypes) or \
+                     ("text/plain; charset=%s" % response.charset if response.charset else 'text/plain')
       response.headers['Content-Length'] = str(len(out))
       return [out]
-    # Cast Files into iterables
-    if hasattr(out, 'read'):
-      supported = ['application/octet-stream']
-      if response.content_type:
-        supported.append(response.content_type)
-      content_type = self._best_media_match(supported, accepted_mediatypes)
-      if content_type:
-        response.content_type = content_type if content_type != '*/*' else response.content_type
-        return request.environ.get('wsgi.file_wrapper', lambda x, y: iter(lambda: x.read(y), ''))(out, 1024*64)
-
+    
     return self._cast(bottle.HTTPError(code=406, 
                                        output="The requested URI '%s' exists, but not in a format preferred by the client." % request.path),                      
                       request, response)
