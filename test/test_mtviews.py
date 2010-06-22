@@ -3,7 +3,7 @@ import unittest
 
 from tools import ServerTestBase
 
-from mtviews import jinja2_view as view
+from bottlecork import jinja2_view as view
 
 # curl -X GET http://localhost:8080/get_dict => start 1
 #
