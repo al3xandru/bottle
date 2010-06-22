@@ -1,0 +1,2 @@
+Text Plain Param: {{ it }}
+Extra param: {{ extra_param }}
