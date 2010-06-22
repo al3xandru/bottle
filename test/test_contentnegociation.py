@@ -112,11 +112,11 @@ class ContentNegociation(CorkedServerTest):
 import functools
 from tools import ServerTestBase
 
-from cork import MediaTypeFilter, option_route, option
+from bottlecork import MediaTypeFilter, route_decorator, option
 
 class StandardContentNegociation(ServerTestBase):
   def testEmptyReturn(self):
-    route  = functools.partial(option_route, self.app)
+    route  = functools.partial(route_decorator, self.app)
     mtf = MediaTypeFilter()
     self.app.add_filter(option, mtf.filter)
 
@@ -134,7 +134,7 @@ class StandardContentNegociation(ServerTestBase):
     self.assertStatus(405, '/null-post', method='HEAD')
     
   def testHTTPError(self):
-    route  = functools.partial(option_route, self.app)
+    route  = functools.partial(route_decorator, self.app)
     mtf = MediaTypeFilter()
     self.app.add_filter(option, mtf.filter)
 
@@ -157,7 +157,7 @@ class StandardContentNegociation(ServerTestBase):
     self.assertHeader('Content-Type', 'text/html; charset=UTF-8', '/error_return', env={'HTTP_ACCEPT': 'text/html; q=0.5, text/plain; q=0.9'})    
 
   def testNoMediaType(self):
-    route  = functools.partial(option_route, self.app)
+    route  = functools.partial(route_decorator, self.app)
     mtf = MediaTypeFilter()
     self.app.add_filter(option, mtf.filter)
     
@@ -184,7 +184,7 @@ class StandardContentNegociation(ServerTestBase):
     self.assertHeader('Content-Type', 'text/plain; charset=UTF-8', '/str')   
     
   def testStaticFiles(self):
-    route  = functools.partial(option_route, self.app)
+    route  = functools.partial(route_decorator, self.app)
     mtf = MediaTypeFilter()
     self.app.add_filter(option, mtf.filter)
 
@@ -201,7 +201,7 @@ class StandardContentNegociation(ServerTestBase):
     self.assertHeader('Content-Type', 'text/x-python', '/static_file')
     
   def testFilters(self):
-    route  = functools.partial(option_route, self.app)
+    route  = functools.partial(route_decorator, self.app)
     mtf = MediaTypeFilter()
     self.app.add_filter(option, mtf.filter)
     
@@ -217,7 +217,7 @@ class StandardContentNegociation(ServerTestBase):
     self.assertStatus(406, '/list', env={'HTTP_ACCEPT': 'application/xml'})
     
   def testAdvancedFilters(self):
-    route  = functools.partial(option_route, self.app)
+    route  = functools.partial(route_decorator, self.app)
     mtf = MediaTypeFilter()
     self.app.add_filter(option, mtf.filter)
     
